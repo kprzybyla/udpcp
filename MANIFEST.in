@@ -1,0 +1,10 @@
+include README.rst
+include setup.py
+
+graft src
+
+exclude tests/**/*
+exclude .gitignore
+exclude .gitlab-ci.yml
+
+recursive-exclude * *.pyc *.pyo
