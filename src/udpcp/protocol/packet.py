@@ -1,21 +1,23 @@
-__all__ = ['Packet']
+__all__ = [
+    'Packet',
+]
 
 import zlib
-import typing
 
-from ._utils import specification
+from . import exceptions
+from .packet_type import PacketType
 from .message_type import MessageType
 from .transfer_mode import TransferMode
 from .checksum_mode import ChecksumMode
 
-PacketType = typing.TypeVar('PacketType', bound='Packet')
+from . import _specification
 
 
 class Packet:
 
     version = 2
 
-    __slots__ = [
+    __slots__ = (
         '_checksum',
         '_message_type',
         '_transfer_mode',
@@ -26,7 +28,7 @@ class Packet:
         '_message_id',
         '_message_data_length',
         '_payload_data',
-    ]
+    )
 
     def __init__(
         self,
@@ -40,7 +42,6 @@ class Packet:
         message_data_length: int,
         payload_data: bytes,
     ) -> None:
-
         self._checksum = 0
         self._message_type = message_type
         self._transfer_mode = transfer_mode
@@ -54,40 +55,33 @@ class Packet:
 
         self._calculate_checksum()
 
-    def __str__(self):
-
-        return f'packet(' \
-               f'type = {self.type}, ' \
-               f'version = {self.version}, ' \
-               f'checksum = 0x{self.checksum}, ' \
-               f'checksum_mode = {self.checksum_mode}, ' \
-               f'transfer_mode = {self.transfer_mode}, ' \
-               f'fragment_amount = {self.fragment_amount}, ' \
-               f'fragment_number = {self.fragment_number}, ' \
-               f'message_id = 0x{self.message_id}, ' \
-               f'message_data_length = {self.message_data_length}, ' \
-               f'payload_data = {self.payload_data}' \
-               f')'
+    def __repr__(self):
+        return ''.join([
+            'udpcp.protocol.Packet[',
+            f'type = {self.type.value}, ',
+            f'version = {self.version}, ',
+            f'checksum = 0x{self.checksum:08x}, ',
+            f'checksum_mode = {self.checksum_mode}, ',
+            f'transfer_mode = {self.transfer_mode}, ',
+            f'fragment_amount = {self.fragment_amount}, ',
+            f'fragment_number = {self.fragment_number}, ',
+            f'message_id = 0x{self.message_id:04x}, ',
+            f'message_data_length = {self.message_data_length}, ',
+            f'payload_data = {self.payload_data}',
+            ']',
+        ])
 
     def __bytes__(self):
-
         return self.as_bytes
 
     @classmethod
-    def from_bytes(
-        cls,
-        data: bytes,
-    ):
-
-        raw = specification.from_bytes(data)
+    def from_bytes(cls, data: bytes) -> 'Packet':
+        raw = _specification.from_bytes(data)
 
         if raw.version != cls.version:
-            raise ValueError(
-                f'Couldn\'t decode packet from bytes: '
-                f'invalid packet protocol version ({raw.version} != {cls.version}).'
-            )
+            raise exceptions.PacketInvalidVersionError(raw.version, cls.version)
 
-        instance = cls(
+        packet = cls(
             MessageType.from_int(raw.message_type),
             TransferMode.from_bits(raw.nbit, raw.sbit),
             ChecksumMode.from_bits(raw.cbit),
@@ -99,26 +93,15 @@ class Packet:
             raw.payload_data,
         )
 
-        if raw.checksum != instance.checksum:
-            raise ValueError(
-                f'Couldn\'t decode packet from bytes: '
-                f'invalid packet checksum ({raw.checksum} != {instance.checksum}).'
-            )
+        if raw.checksum != packet.checksum:
+            raise exceptions.PacketInvalidChecksumError(raw.checksum, packet.checksum)
 
-        return instance
+        return packet
 
     @classmethod
-    def ack(
-        cls,
-        base_packet: PacketType,
-        is_duplicate: bool = False,
-    ):
-
+    def ack(cls, base_packet: 'Packet', is_duplicate: bool = False) -> 'Packet':
         if not base_packet.is_data and not base_packet.is_sync:
-            raise ValueError(
-                f'Couldn\'t create ack packet: '
-                f'invalid base packet ({base_packet}).'
-            )
+            raise exceptions.PacketAckBasePacketError(base_packet)
 
         return cls(
             message_type=MessageType.Ack,
@@ -133,11 +116,7 @@ class Packet:
         )
 
     @classmethod
-    def sync(
-        cls,
-        checksum_mode: ChecksumMode,
-    ):
-
+    def sync(cls, checksum_mode: ChecksumMode) -> 'Packet':
         return cls(
             message_type=MessageType.Data,
             transfer_mode=TransferMode.AckEveryPacket,
@@ -159,31 +138,18 @@ class Packet:
         fragment_number: int,
         message_id: int,
         payload_data: bytes,
-    ):
-
+    ) -> 'Packet':
         if message_id == 0:
-            raise ValueError(
-                'Couldn\'t create data packet: '
-                'message id cannot equal 0.'
-            )
+            raise exceptions.PacketInvalidMessageIdError(message_id)
 
         if fragment_amount < 1:
-            raise ValueError(
-                'Couldn\'t create data packet: '
-                'fragment amount cannot be less than 1.'
-            )
+            raise exceptions.PacketInvalidFragmentAmountError(fragment_amount)
 
         if fragment_number < 0:
-            raise ValueError(
-                'Couldn\'t create data packet: '
-                'fragment number cannot be less than 0.'
-            )
+            raise exceptions.PacketInvalidFragmentNumberError(fragment_amount, fragment_number)
 
         if fragment_number >= fragment_amount:
-            raise ValueError(
-                'Couldn\'t create data packet: '
-                'fragment number cannot be greater than fragment amount.'
-            )
+            raise exceptions.PacketInvalidFragmentNumberError(fragment_amount, fragment_number)
 
         return cls(
             message_type=MessageType.Data,
@@ -194,133 +160,119 @@ class Packet:
             fragment_number=fragment_number,
             message_id=message_id,
             message_data_length=len(payload_data),
-            payload_data=payload_data
+            payload_data=payload_data,
         )
 
     @property
-    def type(self) -> str:
-
+    def type(self) -> PacketType:
         if self.is_ack:
-            return 'ack'
+            return PacketType.Ack
         elif self.is_sync:
-            return 'sync'
+            return PacketType.Sync
         elif self.is_data:
-            return 'data'
+            return PacketType.Data
         else:
-            return 'invalid'
+            return PacketType.Invalid
 
     @property
     def message_type(self) -> MessageType:
-
         return self._message_type
 
     @property
     def checksum(self) -> int:
-
         return self._checksum
 
     @property
     def transfer_mode(self) -> TransferMode:
-
         return self._transfer_mode
 
     @property
     def checksum_mode(self) -> ChecksumMode:
-
         return self._checksum_mode
 
     @property
     def nbit(self) -> bool:
-
         return self.transfer_mode.nbit
 
     @property
     def cbit(self) -> bool:
-
         return self.checksum_mode.cbit
 
     @property
     def sbit(self) -> bool:
-
         return self.transfer_mode.sbit
 
     @property
     def dbit(self) -> bool:
-
         return self.is_duplicate
 
     @property
     def is_duplicate(self) -> bool:
-
         return self._is_duplicate
 
     @property
     def reserved(self) -> int:
-
         return 0
 
     @property
     def fragment_amount(self) -> int:
-
         return self._fragment_amount
 
     @property
     def fragment_number(self) -> int:
-
         return self._fragment_number
 
     @property
     def message_id(self) -> int:
-
         return self._message_id
 
     @property
     def message_data_length(self) -> int:
-
         return self._message_data_length
 
     @property
     def payload_data(self) -> bytes:
-
         return self._payload_data
 
     @property
     def is_ack(self) -> bool:
-
-        return MessageType.Ack is self.message_type \
-               and TransferMode.AckNone is self.transfer_mode \
-               and self.message_data_length == 0
+        return (
+            MessageType.Ack is self.message_type
+            and TransferMode.AckNone is self.transfer_mode
+            and self.message_data_length == 0
+        )
 
     @property
     def is_sync(self) -> bool:
-
-        return MessageType.Data is self.message_type \
-               and TransferMode.AckEveryPacket is self.transfer_mode \
-               and not self.is_duplicate \
-               and self.message_id == 0 \
-               and self.message_data_length == 0
+        return (
+            MessageType.Data is self.message_type
+            and TransferMode.AckEveryPacket is self.transfer_mode
+            and not self.is_duplicate
+            and self.message_id == 0
+            and self.message_data_length == 0
+        )
 
     @property
     def is_data(self) -> bool:
-
-        return MessageType.Data is self.message_type \
-               and not self.is_duplicate \
-               and self.message_id != 0
+        return (
+            MessageType.Data is self.message_type
+            and not self.is_duplicate
+            and self.message_id != 0
+        )
 
     @property
     def is_single(self) -> bool:
-
-        return self.fragment_amount == 1 \
+        return (
+            self.fragment_amount == 1
             and self.fragment_number == 0
+        )
 
     @property
     def is_last(self) -> bool:
-
         return self.fragment_amount == self.fragment_number + 1
 
     @property
     def is_ack_needed(self) -> bool:
-
         ack_every_packet = TransferMode.AckEveryPacket is self.transfer_mode
         ack_last_fragment_only = TransferMode.AckLastFragmentOnly is self.transfer_mode
 
@@ -328,14 +280,18 @@ class Packet:
 
     @property
     def as_bytes(self) -> bytes:
+        return _specification.as_bytes(self)
 
-        return specification.as_bytes(self)
+    def is_ack_for(self, data: 'Packet') -> bool:
+        return (
+            self.is_ack
+            and self.message_id == data.message_id
+            and self.fragment_amount == data.fragment_amount
+            and self.fragment_number == data.fragment_number
+        )
 
     def _calculate_checksum(self) -> None:
-
         self._checksum = 0
 
-        if self.checksum_mode is ChecksumMode.Disabled:
-            return
-
-        self._checksum = zlib.adler32(self.as_bytes, 1)
+        if self.checksum_mode is not ChecksumMode.Disabled:
+            self._checksum = zlib.adler32(self.as_bytes, 1)
