@@ -4,7 +4,9 @@ import zlib
 import typing
 
 from ._utils import specification
-from .behaviour import MessageType, TransferMode, ChecksumMode
+from .message_type import MessageType
+from .transfer_mode import TransferMode
+from .checksum_mode import ChecksumMode
 
 PacketType = typing.TypeVar('PacketType', bound='Packet')
 
