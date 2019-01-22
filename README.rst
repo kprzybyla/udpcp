@@ -1,9 +1,9 @@
-UDPCP Protocol (Version 2) Library
-----------------------------------
+Pure Python UDPCP Protocol Library (Version 2)
+----------------------------------------------
 
 .. image:: https://img.shields.io/badge/python-3.6%2B-blue.svg
 
-Python module for UDPCP Protocol (Version 2). Under development.
+Pure Python UDPCP Protocol Library (Version 2). Under development.
 
 
 Bugs/Requests
