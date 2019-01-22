@@ -1,7 +1,6 @@
 import pytest
 
-from udpcp.protocol import Packet
-from udpcp.protocol.behaviour import MessageType, ChecksumMode, TransferMode
+from udpcp.protocol import Packet, MessageType, ChecksumMode, TransferMode
 
 
 def test_ack():
@@ -84,7 +83,7 @@ def test_checksum_mode_enabled():
         checksum_mode=ChecksumMode.Enabled,
     )
 
-    assert packet.checksum == 0x2960053
+    assert packet.checksum == 0x2A20054
 
 
 def test_checksum_mode_disabled():

@@ -4,7 +4,9 @@ import zlib
 import typing
 
 from ._utils import specification
-from .behaviour import MessageType, TransferMode, ChecksumMode
+from .message_type import MessageType
+from .transfer_mode import TransferMode
+from .checksum_mode import ChecksumMode
 
 PacketType = typing.TypeVar('PacketType', bound='Packet')
 
@@ -336,4 +338,4 @@ class Packet:
         if self.checksum_mode is ChecksumMode.Disabled:
             return
 
-        self._checksum = zlib.adler32(self.as_bytes, 0)
+        self._checksum = zlib.adler32(self.as_bytes, 1)
