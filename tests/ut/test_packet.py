@@ -1,7 +1,6 @@
 import pytest
 
-from udpcp.protocol import Packet
-from udpcp.protocol.behaviour import MessageType, ChecksumMode, TransferMode
+from udpcp.protocol import Packet, MessageType, ChecksumMode, TransferMode
 
 
 def test_ack():
