@@ -1,0 +1,25 @@
+# Python
+*.pyc
+
+# setup.py
+.eggs/
+*.egg-info/
+dist/
+build/
+_version.py
+
+# PyCharm
+.idea/
+
+# py.test
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+
+# tox
+.tox/
+
+# Coverage
+.coverage
+htmlcov/
